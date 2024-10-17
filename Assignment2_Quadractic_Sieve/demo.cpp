@@ -1,7 +1,6 @@
-
 #include <algorithm>
 #include <cmath>
-#include <gmp.h>
+#include <gmpxx.h>
 #include <iostream>
 #include <mpi.h>
 #include <vector>
@@ -34,7 +33,9 @@ std::vector<int> generatePrimes(int limit) {
 // Returns 1 if 'a' is a quadratic residue modulo 'p'
 // Returns -1 if 'a' is a non-residue modulo 'p'
 // Returns 0 if 'p' divides 'a'
-int legendreSymbol(mpz_t a, int p) {
+int legendreSymbol(mpz_class n, int p) {
+   mpz_t a; 
+  mpz_init_set(a, n.get_mpz_t());
   if (mpz_divisible_ui_p(a, p)) {
     return 0;
   }
@@ -58,30 +59,39 @@ int legendreSymbol(mpz_t a, int p) {
 }
 
 // Function to compute Q(x) = (x + m)^2 - n
-int compute_Qx(int x, int m, int n) { return (x + m) * (x + m) - n; }
+void compute_Qx(mpz_class &result,int a, mpz_class m, mpz_class n) { 
+            mpz_class x=a;
+            result = (x + m) * (x + m) - n; 
+            std::cout<<"Qx : "<<result<<"  ,";
+            
+     }
+
+ mpz_class multiplyByUInt(mpz_class a, unsigned int multiplier) {
+    mpz_class result;
+    mpz_mul_ui(result.get_mpz_t(), a.get_mpz_t(), multiplier);
+    return result;
+}    
 
 // Function to factorize Q(x) over the Factor Base
-// Returns a vector of exponents modulo 2 if Q(x) is smooth; otherwise, returns
-// an empty vector
-std::vector<int> factorize_Qx(int Qx,
-                              const std::vector<int> &factor_base_primes) {
-  std::vector<int> exponents;
+// Returns a vector of exponents (including -1) if Q(x) is smooth; otherwise,
+// returns an empty vector
+std::vector<int> factorize_Qx(int Qx, const std::vector<int> &factor_base) {
+  std::vector<int> exponents(factor_base.size(), 0);
+  int original_Qx = Qx;
+
   if (Qx < 0) {
-    // Include -1 in factorization
-    exponents.push_back(1); // Exponent of -1 is 1
+    exponents[0] = 1; // Exponent of -1 is 1
     Qx = -Qx;
-  } else {
-    exponents.push_back(0); // Exponent of -1 is 0
   }
 
-  for (const auto &p : factor_base_primes) {
-    int count = 0;
+  for (size_t i = 1; i < factor_base.size(); ++i) {
+    int p = factor_base[i];
     while (Qx % p == 0) {
-      count++;
+      exponents[i]++;
       Qx /= p;
     }
-    exponents.push_back(count % 2); // Store exponent modulo 2
   }
+
   if (Qx == 1) { // Successfully factorized over Factor Base
     return exponents;
   } else {
@@ -104,7 +114,7 @@ void printMatrix(const std::vector<std::vector<int>> &matrix,
   for (size_t i = 0; i < matrix.size(); ++i) {
     std::cout << i + 1 << "\t";
     for (const auto &val : matrix[i]) {
-      std::cout << val << "\t";
+      std::cout << val % 2 << "\t";
     }
     std::cout << "\n";
   }
@@ -113,12 +123,12 @@ void printMatrix(const std::vector<std::vector<int>> &matrix,
 
 // Function to perform Gaussian Elimination over GF(2) and find dependencies
 std::vector<std::vector<int>>
-findDependencies(std::vector<std::vector<int>> matrix) {
-  int num_rows = matrix.size();
+findDependencies(std::vector<std::vector<int>> matrix_mod2) {
+  int num_rows = matrix_mod2.size();
   if (num_rows == 0)
     return {};
 
-  int num_cols = matrix[0].size();
+  int num_cols = matrix_mod2[0].size();
   std::vector<int> pivot_col(num_cols, -1);
   // Initialize an identity matrix to track dependencies
   std::vector<std::vector<int>> identity(num_rows,
@@ -132,7 +142,7 @@ findDependencies(std::vector<std::vector<int>> matrix) {
     // Find a pivot row
     int pivot_row = -1;
     for (int row = col; row < num_rows; ++row) {
-      if (matrix[row][col] == 1) {
+      if (matrix_mod2[row][col] == 1) {
         pivot_row = row;
         break;
       }
@@ -144,7 +154,7 @@ findDependencies(std::vector<std::vector<int>> matrix) {
 
     // Swap current row with pivot_row if necessary
     if (pivot_row != col) {
-      std::swap(matrix[col], matrix[pivot_row]);
+      std::swap(matrix_mod2[col], matrix_mod2[pivot_row]);
       std::swap(identity[col], identity[pivot_row]);
     }
 
@@ -152,9 +162,9 @@ findDependencies(std::vector<std::vector<int>> matrix) {
 
     // Eliminate all other 1's in this column
     for (int row = 0; row < num_rows; ++row) {
-      if (row != col && matrix[row][col] == 1) {
+      if (row != col && matrix_mod2[row][col] == 1) {
         for (int c = 0; c < num_cols; ++c) {
-          matrix[row][c] ^= matrix[col][c];
+          matrix_mod2[row][c] ^= matrix_mod2[col][c];
         }
         for (int c = 0; c < num_rows; ++c) {
           identity[row][c] ^= identity[col][c];
@@ -170,7 +180,7 @@ findDependencies(std::vector<std::vector<int>> matrix) {
   for (int row = 0; row < num_rows; ++row) {
     bool is_zero = true;
     for (int col = 0; col < num_cols; ++col) {
-      if (matrix[row][col] != 0) {
+      if (matrix_mod2[row][col] != 0) {
         is_zero = false;
         break;
       }
@@ -185,22 +195,54 @@ findDependencies(std::vector<std::vector<int>> matrix) {
 }
 
 int main(int argc, char *argv[]) {
-  // Initialize MPI environment
-  MPI_Init(&argc, &argv);
+   // Initialize MPI environment
+    MPI_Init(&argc, &argv);
 
-  int world_size; // Number of processes
-  MPI_Comm_size(MPI_COMM_WORLD, &world_size);
+    int world_size; // Number of processes
+    MPI_Comm_size(MPI_COMM_WORLD, &world_size);
 
-  int world_rank; // Rank of the current process
-  MPI_Comm_rank(MPI_COMM_WORLD, &world_rank);
+    int world_rank; // Rank of the current process
+    MPI_Comm_rank(MPI_COMM_WORLD, &world_rank);
 
-  // Define the target number 'n' and compute 'm'
-  const int n = 1828844741;
-  const int m = static_cast<int>(std::ceil(std::sqrt(n)));
+    // Define the target number 'n' and compute 'm'
+    mpz_class n, m;
+    std::string n_str, m_str;
+    int n_len, m_len;
+    int root_process = 0;
 
-  // Broadcast 'n' and 'm' to all processes
-  MPI_Bcast(const_cast<int *>(&n), 1, MPI_INT, 0, MPI_COMM_WORLD);
-  MPI_Bcast(const_cast<int *>(&m), 1, MPI_INT, 0, MPI_COMM_WORLD);
+    if (world_rank == root_process) {
+        n.set_str("1001", 10);                // Assign number to n
+        m = sqrt(n);                   // Compute square root of n
+
+        n_str = n.get_str();           // Convert mpz_class to string
+        m_str = m.get_str();           // Convert mpz_class to string
+
+        n_len = n_str.size() + 1;      // Get string lengths (+1 for null terminator)
+        m_len = m_str.size() + 1;
+    }
+
+    // Broadcast the lengths of the strings first
+    MPI_Bcast(&n_len, 1, MPI_INT, root_process, MPI_COMM_WORLD);
+    MPI_Bcast(&m_len, 1, MPI_INT, root_process, MPI_COMM_WORLD);
+
+    // Allocate memory for strings on non-root processes
+    if (world_rank != root_process) {
+        n_str.resize(n_len);
+        m_str.resize(m_len);
+    }
+
+    // Broadcast the actual string data
+    MPI_Bcast(&n_str[0], n_len, MPI_CHAR, root_process, MPI_COMM_WORLD);
+    MPI_Bcast(&m_str[0], m_len, MPI_CHAR, root_process, MPI_COMM_WORLD);
+
+    // Convert strings back to mpz_class on non-root processes
+    if (world_rank != root_process) {
+        n.set_str(n_str, 10);
+        m.set_str(m_str, 10);
+    }
+
+    // Print the values to verify the broadcast
+    std::cout << "Process " << world_rank << ": n = " << n << ", m = " << m << std::endl; 
 
   std::vector<int> factor_base_primes; // Primes where (n/p) = 1
   std::vector<int> factor_base;        // Including -1
@@ -212,7 +254,7 @@ int main(int argc, char *argv[]) {
     std::cout << "Computed m (ceil(sqrt(n))): " << m << "\n" << std::endl;
 
     // Step 1: Generate primes up to 'm'
-    std::vector<int> primes = generatePrimes(m);
+    std::vector<int> primes = generatePrimes(50000);
 
     // Step 2: Exclude primes that divide 'n'
     std::vector<int> primes_filtered;
@@ -223,9 +265,8 @@ int main(int argc, char *argv[]) {
     }
 
     // Initialize GMP variable for 'n'
-    mpz_t mpz_n;
-    mpz_init(mpz_n);
-    mpz_set_ui(mpz_n, n);
+    mpz_class mpz_n=n_len;
+    
 
     std::cout << "Primes up to " << m << ":\n";
     for (const auto &p : primes) {
@@ -253,8 +294,6 @@ int main(int argc, char *argv[]) {
                   << std::endl;
       }
     }
-
-    mpz_clear(mpz_n);
 
     // Step 4: Construct the Factor Base by adding -1
     factor_base.push_back(-1); // Always include -1
@@ -320,11 +359,13 @@ int main(int argc, char *argv[]) {
   }
 
   // Each process computes Q(x) for its assigned x's
-  std::vector<int> local_Qx;
+  std::vector<mpz_class> local_Qx;
   std::vector<int> local_x;
 
   for (int x = local_x_start; x <= local_x_end; ++x) {
-    int Qx = compute_Qx(x, m, n);
+    mpz_class Qx;
+    compute_Qx(Qx,x, m, n);
+    std::cout<<"Qx : "<<Qx<<"  ,";
     local_Qx.push_back(Qx);
     local_x.push_back(x);
   }
@@ -384,6 +425,7 @@ int main(int argc, char *argv[]) {
     // Step 6: Factorize Q(x) and identify smooth relations
     std::vector<std::vector<int>> smooth_relations; // Exponent vectors
     std::vector<int> smooth_x;                      // Corresponding x values
+    std::vector<int> smooth_Qx;                     // Corresponding Q(x) values
 
     std::cout << "Factoring Q(x) over the Factor Base and identifying smooth "
                  "relations...\n"
@@ -391,15 +433,20 @@ int main(int argc, char *argv[]) {
 
     for (int x = x_min; x <= x_max; ++x) {
       int Qx = final_Qx[x];
-      std::vector<int> exponents = factorize_Qx(Qx, factor_base_primes);
+      std::vector<int> exponents = factorize_Qx(Qx, factor_base);
       if (!exponents.empty()) { // Q(x) is smooth
         smooth_relations.emplace_back(exponents);
         smooth_x.push_back(x);
+        smooth_Qx.push_back(Qx);
         std::cout << "Q(" << x << ") = " << Qx
                   << " is smooth over the Factor Base." << std::endl;
-        std::cout << "Exponents (mod 2): ";
+        std::cout << "Exponents: ";
         for (const auto &exp : exponents) {
           std::cout << exp << " ";
+        }
+        std::cout << "\nExponents (mod 2): ";
+        for (const auto &exp : exponents) {
+          std::cout << exp % 2 << " ";
         }
         std::cout << "\n" << std::endl;
       } else {
@@ -433,8 +480,14 @@ int main(int argc, char *argv[]) {
     std::cout << "Performing Gaussian Elimination over GF(2) to find "
                  "dependencies...\n"
               << std::endl;
-    std::vector<std::vector<int>> dependencies =
-        findDependencies(smooth_relations);
+    // Create a copy of the matrix with exponents modulo 2
+    std::vector<std::vector<int>> matrix_mod2 = smooth_relations;
+    for (auto &row : matrix_mod2) {
+      for (auto &val : row) {
+        val = val % 2;
+      }
+    }
+    std::vector<std::vector<int>> dependencies = findDependencies(matrix_mod2);
 
     // Display Dependencies
     if (dependencies.empty()) {
@@ -451,12 +504,122 @@ int main(int argc, char *argv[]) {
         std::cout << "\n";
       }
       std::cout << "\n";
-    }
 
-    // Note: In a complete implementation, you'd use these dependencies to
-    // compute congruent squares and derive non-trivial factors of 'n'. This
-    // involves additional steps like constructing the product of Q(x) values
-    // and computing GCDs, which are beyond the current scope.
+      // Step 9: Use dependencies to compute 'a' and 'b', and find factors
+      std::cout << "Attempting to find factors using dependencies...\n"
+                << std::endl;
+
+    mpz_t mpz_n;             // Declare the mpz_t variable
+    mpz_init(mpz_n);         // Initialize it
+    mpz_set(mpz_n, n.get_mpz_t()); // Set its value from mpz_class
+
+      for (size_t i = 0; i < dependencies.size(); ++i) {
+        // Initialize 'a' and 'b'
+        mpz_t a, b;
+        mpz_inits(a, b, NULL);
+        mpz_set_ui(a, 1);
+        mpz_set_ui(b, 1);
+
+        // Exponent vector for 'b'
+        std::vector<int> total_exponents(factor_base.size(), 0);
+
+        // Multiply corresponding x + m for 'a' and collect exponents for 'b'
+        for (size_t j = 0; j < dependencies[i].size(); ++j) {
+          if (dependencies[i][j] == 1) {
+            mpz_class x = smooth_x[j];
+            mpz_class x_plus_m = x + m;
+            //mpz_mul_ui(a, a, x_plus_m);
+            mpz_class a = 1; // Example initialization of a
+            a = multiplyByUInt(a, x_plus_m.get_ui());
+
+            // Sum exponents
+            for (size_t k = 0; k < factor_base.size(); ++k) {
+              total_exponents[k] += smooth_relations[j][k];
+            }
+          }
+        }
+
+        // Divide exponents by 2 for 'b' (since exponents are even)
+        for (size_t k = 0; k < total_exponents.size(); ++k) {
+          total_exponents[k] /= 2;
+        }
+
+        // Compute 'b' as the product of primes raised to the total_exponents
+        for (size_t k = 0; k < factor_base.size(); ++k) {
+          if (total_exponents[k] > 0) {
+            mpz_t temp;
+            mpz_init(temp);
+            mpz_set_si(temp, factor_base[k]);
+            mpz_pow_ui(temp, temp, total_exponents[k]);
+            mpz_mul(b, b, temp);
+            mpz_clear(temp);
+          }
+        }
+
+        // Compute 'a mod n' and 'b mod n'
+        mpz_mod(a, a, mpz_n);
+        mpz_mod(b, b, mpz_n);
+
+        // Compute gcd(a - b, n)
+        mpz_t gcd;
+        mpz_init(gcd);
+        mpz_t diff;
+        mpz_init(diff);
+        mpz_sub(diff, a, b);
+        mpz_abs(diff, diff); // Ensure positive
+        mpz_gcd(gcd, diff, mpz_n);
+
+        // Check if gcd is a non-trivial factor
+        if (mpz_cmp_ui(gcd, 1) > 0 && mpz_cmp(gcd, mpz_n) < 0) {
+          // Compute the complementary factor
+          mpz_t complementary_factor;
+          mpz_init(complementary_factor);
+          mpz_divexact(complementary_factor, mpz_n, gcd);
+
+          std::cout << "Non-trivial factor found: ";
+          mpz_out_str(stdout, 10, gcd);
+          std::cout << "\nComplementary factor: ";
+          mpz_out_str(stdout, 10, complementary_factor);
+          std::cout << "\n" << std::endl;
+
+          mpz_clears(a, b, gcd, diff, complementary_factor, NULL);
+          mpz_clear(mpz_n);
+          MPI_Finalize();
+          return 0;
+        }
+
+        // Compute gcd(a + b, n)
+        mpz_add(diff, a, b);
+        mpz_mod(diff, diff, mpz_n); // Ensure within n
+        mpz_gcd(gcd, diff, mpz_n);
+
+        if (mpz_cmp_ui(gcd, 1) > 0 && mpz_cmp(gcd, mpz_n) < 0) {
+          // Compute the complementary factor
+          mpz_t complementary_factor;
+          mpz_init(complementary_factor);
+          mpz_divexact(complementary_factor, mpz_n, gcd);
+
+          std::cout << "Non-trivial factor found: ";
+          mpz_out_str(stdout, 10, gcd);
+          std::cout << "\nComplementary factor: ";
+          mpz_out_str(stdout, 10, complementary_factor);
+          std::cout << "\n" << std::endl;
+
+          mpz_clears(a, b, gcd, diff, complementary_factor, NULL);
+          mpz_clear(mpz_n);
+          MPI_Finalize();
+          return 0;
+        }
+
+        mpz_clears(a, b, gcd, diff, NULL);
+      }
+
+      mpz_clear(mpz_n);
+
+      std::cout
+          << "No non-trivial factors found with the current dependencies.\n"
+          << std::endl;
+    }
   }
 
   // Finalize MPI environment

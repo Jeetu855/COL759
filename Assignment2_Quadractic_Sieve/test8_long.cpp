@@ -3,6 +3,7 @@
 #include <iostream>
 #include <mpi.h>
 #include <vector>
+#include <numeric> 
 
 // Function to generate all prime numbers up to 'limit' using Sieve of
 // Eratosthenes
@@ -464,7 +465,7 @@ int main(int argc, char *argv[]) {
         long long diff = (a - b) % n;
         if (diff < 0)
           diff += n;
-        long long gcd_value = std::__gcd(diff, n);
+        long long gcd_value = std::gcd(diff, n);
 
         // Check if gcd is a non-trivial factor
         if (gcd_value > 1 && gcd_value < n) {
