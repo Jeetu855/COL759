@@ -7,21 +7,21 @@
 
 // Function to generate all prime numbers up to 'limit' using Sieve of
 // Eratosthenes
-std::vector<int> generatePrimes(int limit) {
+std::vector<unsigned long> generatePrimes(unsigned long limit) {
   std::vector<bool> is_prime(limit + 1, true);
   is_prime[0] = is_prime[1] = false;
 
-  int sqrt_limit = static_cast<int>(std::sqrt(limit));
-  for (int p = 2; p <= sqrt_limit; ++p) {
+  unsigned long sqrt_limit = static_cast<int>(std::sqrt(limit));
+  for (unsigned long p = 2; p <= sqrt_limit; ++p) {
     if (is_prime[p]) {
-      for (int multiple = p * p; multiple <= limit; multiple += p) {
+      for (unsigned long multiple = p * p; multiple <= limit; multiple += p) {
         is_prime[multiple] = false;
       }
     }
   }
 
-  std::vector<int> primes;
-  for (int p = 2; p <= limit; ++p) {
+  std::vector<unsigned long> primes;
+  for (unsigned long p = 2; p <= limit; ++p) {
     if (is_prime[p]) {
       primes.push_back(p);
     }
@@ -62,8 +62,8 @@ int legendreSymbol(mpz_class n, int p) {
 void compute_Qx(mpz_class &result,int a, mpz_class m, mpz_class n) { 
             mpz_class x=a;
             result = (x + m) * (x + m) - n; 
-            std::cout<<"Qx : "<<result<<"  ,";
-            
+           // std::cout<<"Qx : "<<result<<"  ,";
+
      }
 
  mpz_class multiplyByUInt(mpz_class a, unsigned int multiplier) {
@@ -211,8 +211,9 @@ int main(int argc, char *argv[]) {
     int root_process = 0;
 
     if (world_rank == root_process) {
-        n.set_str("1001", 10);                // Assign number to n
-        m = sqrt(n);                   // Compute square root of n
+       n.set_str("300000000000000000000000000000000000000000003 ", 10); 
+       //n.set_str("15 ", 10);                // Assign number to n
+        m = sqrt(n) +1;                   // Compute square root of n
 
         n_str = n.get_str();           // Convert mpz_class to string
         m_str = m.get_str();           // Convert mpz_class to string
@@ -254,7 +255,9 @@ int main(int argc, char *argv[]) {
     std::cout << "Computed m (ceil(sqrt(n))): " << m << "\n" << std::endl;
 
     // Step 1: Generate primes up to 'm'
-    std::vector<int> primes = generatePrimes(50000);
+    std::vector<unsigned long> primes;
+    //unsigned long m_1 = m.get_ui();
+    primes = generatePrimes(100000);  
 
     // Step 2: Exclude primes that divide 'n'
     std::vector<int> primes_filtered;
@@ -265,8 +268,8 @@ int main(int argc, char *argv[]) {
     }
 
     // Initialize GMP variable for 'n'
-    mpz_class mpz_n=n_len;
-    
+     mpz_class mpz_n = mpz_class(n);
+
 
     std::cout << "Primes up to " << m << ":\n";
     for (const auto &p : primes) {
@@ -282,8 +285,7 @@ int main(int argc, char *argv[]) {
       int ls = legendreSymbol(mpz_n, p);
       std::cout << "Legendre symbol (" << n << "/" << p << ") = " << ls
                 << std::endl;
-      if (ls ==
-          1) { // Include in Factor Base if n is a quadratic residue modulo p
+      if (ls == 1) { // Include in Factor Base if n is a quadratic residue modulo p
         factor_base_primes.push_back(p);
         std::cout << p << " is a quadratic residue modulo " << p
                   << ". Included in Factor Base.\n"
@@ -294,7 +296,6 @@ int main(int argc, char *argv[]) {
                   << std::endl;
       }
     }
-
     // Step 4: Construct the Factor Base by adding -1
     factor_base.push_back(-1); // Always include -1
     for (const auto &p : factor_base_primes) {
@@ -361,7 +362,7 @@ int main(int argc, char *argv[]) {
   // Each process computes Q(x) for its assigned x's
   std::vector<mpz_class> local_Qx;
   std::vector<int> local_x;
-
+  std :: cout<<"world rank :"<<world_rank<<"local_x_start :"<<local_x_start<<"local_x_end"<<local_x_end;
   for (int x = local_x_start; x <= local_x_end; ++x) {
     mpz_class Qx;
     compute_Qx(Qx,x, m, n);
@@ -369,35 +370,38 @@ int main(int argc, char *argv[]) {
     local_Qx.push_back(Qx);
     local_x.push_back(x);
   }
-
+  MPI_Barrier(MPI_COMM_WORLD);  //Ensure all process calculate Qx for their respective class
   // Now, gather all Q(x) values to the root process
   // First, gather the counts from each process
-  int local_count = local_Qx.size();
+  std::size_t local_count = local_Qx.size();
   std::vector<int> recv_counts(world_size, 0);
 
-  MPI_Gather(&local_count, 1, MPI_INT, recv_counts.data(), 1, MPI_INT, 0,
-             MPI_COMM_WORLD);
-
+  MPI_Gather(&local_count, 1,MPI_INT, recv_counts.data(), 1,MPI_INT, 0,
+             MPI_COMM_WORLD);        // send sixe of Qx
+  std::cout<<"\n\n";
   // Now, prepare for Gatherv
-  std::vector<int> displs;
-  std::vector<int> all_Qx;
-  std::vector<int> all_x;
+  std::vector<int> displs;      // It tells MPI where each process's data starts in the final collected array.
+  std::vector<int> all_Qx;      // will hold all corresponding all the gathered Q(x)
+  std::vector<int> all_x;       // will hold all corresponding x value
   if (world_rank == 0) {
     displs.resize(world_size, 0);
-    int total_recv = recv_counts[0];
+    int total_recv = recv_counts[0];       //received from the root process itself Q(x)
     for (int i = 1; i < world_size; ++i) {
       displs[i] = displs[i - 1] + recv_counts[i - 1];
+      std::cout<<" displs["<<i<<"] = "<<displs[i]<<recv_counts[i] <<" ";
       total_recv += recv_counts[i];
     }
+
     all_Qx.resize(total_recv, 0); // Resize to hold all received Q(x)
     all_x.resize(total_recv, 0);  // Resize to hold all received x's
   }
 
   // Gather all Q(x) values
   MPI_Gatherv(local_Qx.data(), local_count, MPI_INT, all_Qx.data(),
-              recv_counts.data(), displs.data(), MPI_INT, 0, MPI_COMM_WORLD);
+              recv_counts.data(), displs.data(),MPI_INT, 0, MPI_COMM_WORLD);
 
   // Gather all x values
+  //send_mpz_class_vector(local_Qx, 0, MPI_COMM_WORLD);
   MPI_Gatherv(local_x.data(), local_count, MPI_INT, all_x.data(),
               recv_counts.data(), displs.data(), MPI_INT, 0, MPI_COMM_WORLD);
 
@@ -418,8 +422,8 @@ int main(int argc, char *argv[]) {
     // Display the final Q(x) array
     std::cout << "Final Q(x) Array:\n";
     for (int x = x_min; x <= x_max; ++x) {
-      std::cout << "Q(" << x << ") = " << final_Qx[x] << std::endl;
-    }
+      std::cout << "Q(" << x << ") = " << final_Qx[x]<<"yes or no " << std::endl;
+      }
     std::cout << "\n";
 
     // Step 6: Factorize Q(x) and identify smooth relations

@@ -192,7 +192,7 @@ int main(int argc, char *argv[]) {
   MPI_Comm_rank(MPI_COMM_WORLD, &world_rank);
 
   // Define the target number 'n' and compute 'm'
-  const int n = 1828844741;
+  const int n = 100000;
   const int m = static_cast<int>(std::ceil(std::sqrt(n)));
 
   // Broadcast 'n' and 'm' to all processes
@@ -238,8 +238,7 @@ int main(int argc, char *argv[]) {
       int ls = legendreSymbol(mpz_n, p);
       std::cout << "Legendre symbol (" << n << "/" << p << ") = " << ls
                 << std::endl;
-      if (ls ==
-          1) { // Include in Factor Base if n is a quadratic residue modulo p
+      if (ls == 1) { // Include in Factor Base if n is a quadratic residue modulo p
         factor_base_primes.push_back(p);
         std::cout << p << " is a quadratic residue modulo " << p
                   << ". Included in Factor Base.\n"
@@ -319,13 +318,14 @@ int main(int argc, char *argv[]) {
   // Each process computes Q(x) for its assigned x's
   std::vector<int> local_Qx;
   std::vector<int> local_x;
-
+  std :: cout<<"world rank :"<<world_rank<<"local_x_start :"<<local_x_start<<"local_x_end"<<local_x_end;
   for (int x = local_x_start; x <= local_x_end; ++x) {
     int Qx = compute_Qx(x, m, n);
+    std::cout<<"Qx : "<<Qx<<"  ,";
     local_Qx.push_back(Qx);
     local_x.push_back(x);
   }
-
+  MPI_Barrier(MPI_COMM_WORLD); //to ensure all calculate Qx
   // Now, gather all Q(x) values to the root process
   // First, gather the counts from each process
   int local_count = local_Qx.size();
@@ -333,7 +333,7 @@ int main(int argc, char *argv[]) {
 
   MPI_Gather(&local_count, 1, MPI_INT, recv_counts.data(), 1, MPI_INT, 0,
              MPI_COMM_WORLD);
-
+std::cout<<"\n\n";
   // Now, prepare for Gatherv
   std::vector<int> displs;
   std::vector<int> all_Qx;
@@ -343,8 +343,10 @@ int main(int argc, char *argv[]) {
     int total_recv = recv_counts[0];
     for (int i = 1; i < world_size; ++i) {
       displs[i] = displs[i - 1] + recv_counts[i - 1];
+      std::cout<<" displs["<<i<<"] = "<<displs[i]<<recv_counts[i] <<" ";
       total_recv += recv_counts[i];
     }
+    std::cout<<"\ntotal_recv : "<<total_recv<<"\n";
     all_Qx.resize(total_recv, 0); // Resize to hold all received Q(x)
     all_x.resize(total_recv, 0);  // Resize to hold all received x's
   }

@@ -198,8 +198,7 @@ int main(int argc, char *argv[]) {
   MPI_Comm_rank(MPI_COMM_WORLD, &world_rank);
 
   // Define the target number 'n' and compute 'm'
-  const long long n =
-      10000004400000259LL; // 17-digit number (ensure it fits in long long)
+  const long long n =  100000980000501LL; // 17-digit number (ensure it fits in long long)
   const int m = static_cast<int>(std::ceil(std::sqrt(static_cast<double>(n))));
 
   // Broadcast 'n' and 'm' to all processes
