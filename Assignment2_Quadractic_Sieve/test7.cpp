@@ -192,7 +192,7 @@ int main(int argc, char *argv[]) {
   MPI_Comm_rank(MPI_COMM_WORLD, &world_rank);
 
   // Define the target number 'n' and compute 'm'
-  const int n = 100000;
+  const int n = 1001;
   const int m = static_cast<int>(std::ceil(std::sqrt(n)));
 
   // Broadcast 'n' and 'm' to all processes

@@ -301,7 +301,7 @@ int main(int argc, char *argv[]) {
   std::string n_str;
   if (world_rank == 0) {
     // Example large number (replace with desired 35-40 digit number)
-    n_str = "5486150758706356557450962117";
+    n_str = "3322255777000000116279154852602397";
     std::cout << "Quadratic Sieve (QS) Implementation\n";
     std::cout << "===================================\n";
     std::cout << "Target number (n): " << n_str << std::endl;
@@ -367,7 +367,7 @@ int main(int argc, char *argv[]) {
   std::vector<int> factor_base;        // Including -1
 
   // Step 1: Generate primes up to a certain limit
-  int prime_limit = 20000; // Adjust as needed for larger numbers
+  int prime_limit = 50000; // Adjust as needed for larger numbers
   std::vector<int> primes = generatePrimes(prime_limit);
 
   // Step 2: Exclude primes that divide 'n'
@@ -416,7 +416,7 @@ int main(int argc, char *argv[]) {
 
   // Step 5: Sieving Process - Compute Q(x) for x in a range
   const int x_min = 0;
-  const int x_max = 4000000; // Increase the range to collect more relations
+  const int x_max = 9000000; // Increase the range to collect more relations
   const int total_x = x_max - x_min + 1;
 
   // Determine the number of x's per process
