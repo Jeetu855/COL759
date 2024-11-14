@@ -140,7 +140,6 @@ std::vector<std::vector<int>> findDependenciesOptimized(
   size_t row = 0;
   for (size_t col = 0; col < num_cols && row < num_rows; ++col) {
     size_t pivot = row;
-    // Find pivot row
     while (pivot < num_rows) {
       size_t block = col / BITS_PER_BLOCK;
       size_t bit = col % BITS_PER_BLOCK;
@@ -200,6 +199,13 @@ std::vector<std::vector<int>> findDependenciesOptimized(
   return dependencies;
 }
 
+// New function to check if 'n' is a perfect square
+bool isPerfectSquare(const mpz_class &n, mpz_class &sqrt_n) {
+  mpz_sqrt(sqrt_n.get_mpz_t(), n.get_mpz_t()); // sqrt_n = floor(sqrt(n))
+  mpz_class square = sqrt_n * sqrt_n;
+  return square == n;
+}
+
 int main(int argc, char *argv[]) {
   MPI_Init(&argc, &argv);
   int world_size;
@@ -209,7 +215,7 @@ int main(int argc, char *argv[]) {
 
   std::string n_str;
   if (world_rank == 0) {
-    // Example large number (replace with desired 35-40 digit number)
+
     n_str = "5486150758706356557450962117";
     std::cout << "Quadratic Sieve (QS) Implementation\n";
     std::cout << "===================================\n";
@@ -232,6 +238,17 @@ int main(int argc, char *argv[]) {
 
   mpz_class m;
   mpz_sqrt(m.get_mpz_t(), n.get_mpz_t());
+
+  // Check if 'n' is a perfect square
+  mpz_class sqrt_n;
+  if (isPerfectSquare(n, sqrt_n)) {
+    if (world_rank == 0) {
+      std::cout << "The number n is a perfect square." << std::endl;
+      std::cout << "Non-trivial factor found: " << sqrt_n << std::endl;
+    }
+    MPI_Finalize();
+    return 0;
+  }
 
   if (world_rank == 0) {
     std::cout << "Computed m (floor(sqrt(n))): " << m << "\n" << std::endl;
@@ -265,8 +282,7 @@ int main(int argc, char *argv[]) {
   std::vector<int> factor_base_primes;
   std::vector<int> factor_base;
 
-  // Step 1: Generate primes up to a certain limit
-  int prime_limit = 20000; // Adjust as needed for larger numbers
+  int prime_limit = 20000;
   std::vector<int> primes = generatePrimes(prime_limit);
 
   std::vector<int> primes_filtered;
@@ -306,7 +322,7 @@ int main(int argc, char *argv[]) {
   MPI_Barrier(MPI_COMM_WORLD);
 
   const int x_min = 0;
-  const int x_max = 4000000; // Increase the range to collect more relations
+  const int x_max = 4000000;
   const int total_x = x_max - x_min + 1;
 
   int x_per_process = total_x / world_size;
