@@ -2,7 +2,7 @@
 import socket
 import threading
 
-from aes import decrypt_cbc  # Using simplistic AES
+from aes import decrypt_cbc  # Updated to use actual AES decryption
 from database import setup_database, store_message
 from utils import derive_key
 
@@ -12,6 +12,7 @@ SERVER_PORT = 65432  # Fixed port
 BUFFER_SIZE = 4096
 PASSWORD = "YourSecurePassword"  # Must match the client's password
 SALT = b"\x1a\xb4\x10\x8c\xe2\xa1\x95\x1f\xbf\xc3\xd9\x88\x7f\xea\xfd\xe4"  # Must match the client's salt
+MAX_USERNAME_LENGTH = 16  # Limit username to 16 bytes
 
 # Derive the encryption key
 KEY = derive_key(PASSWORD, SALT)
@@ -52,6 +53,13 @@ def handle_client(client_socket, address):
                 decrypted_message = decrypt_cbc(KEY, iv, encrypted_message).decode(
                     "utf-8"
                 )
+
+                # Enforce username length limit
+                if len(decrypted_user_id.encode("utf-8")) > MAX_USERNAME_LENGTH:
+                    print(
+                        f"[-] Username exceeds maximum length from {address}. Truncating."
+                    )
+                    decrypted_user_id = decrypted_user_id[:MAX_USERNAME_LENGTH]
 
                 print(f"[{decrypted_user_id}] {decrypted_message}")
 
