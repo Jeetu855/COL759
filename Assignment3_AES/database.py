@@ -38,3 +38,9 @@ def store_message(user_id: bytes, message: bytes, iv: bytes):
     )
     conn.commit()
     conn.close()
+
+
+# Initialize the database
+if __name__ == "__main__":
+    setup_database()
+    print("Database setup complete.")
