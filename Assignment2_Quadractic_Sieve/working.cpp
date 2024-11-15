@@ -183,7 +183,7 @@ int main(int argc, char *argv[]) {
   std::string n_str;
   if (world_rank == 0) {
     // Example large number (replace with desired 35-40 digit number)
-    n_str = "5486150758706356557450962117";
+    n_str = "9703841818924589184253";
     std::cout << "Quadratic Sieve (QS) Implementation\n";
     std::cout << "===================================\n";
     std::cout << "Target number (n): " << n_str << std::endl;
@@ -298,7 +298,7 @@ int main(int argc, char *argv[]) {
 
   // Step 5: Sieving Process - Compute Q(x) for x in a range
   const int x_min = 0;
-  const int x_max = 10000000; // Increase the range to collect more relations
+  const int x_max = 5000000; // Increase the range to collect more relations
   const int total_x = x_max - x_min + 1;
 
   // Determine the number of x's per process
